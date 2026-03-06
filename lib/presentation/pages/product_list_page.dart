@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
@@ -12,6 +13,7 @@ import '../bloc/product_list/product_list_bloc.dart';
 import '../bloc/theme/theme_cubit.dart';
 import '../widgets/design_system/app_search_bar.dart';
 import '../widgets/design_system/app_states.dart';
+import '../widgets/design_system/cache_banner.dart';
 import '../widgets/design_system/category_chip.dart';
 import '../widgets/design_system/skeleton_loader.dart';
 import '../widgets/product/product_card.dart';
@@ -39,21 +41,17 @@ class _ProductListPageState extends State<ProductListPage> {
     _listBloc = getIt<ProductListBloc>()
       ..add(const ProductListLoadRequested());
     _categoryCubit = getIt<CategoryCubit>()..loadCategories();
-
     _scrollController.addListener(_onScroll);
   }
 
   void _onScroll() {
-    if (_isNearBottom) {
-      _listBloc.add(const ProductListLoadMoreRequested());
-    }
+    if (_isNearBottom) _listBloc.add(const ProductListLoadMoreRequested());
   }
 
   bool get _isNearBottom {
     if (!_scrollController.hasClients) return false;
     final max = _scrollController.position.maxScrollExtent;
-    final current = _scrollController.offset;
-    return current >= max - 300;
+    return _scrollController.offset >= max - 300;
   }
 
   void _onProductTap(ProductModel product, BuildContext context) {
@@ -83,38 +81,33 @@ class _ProductListPageState extends State<ProductListPage> {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final tablet = constraints.maxWidth >= kTabletBreakpoint;
-          if (tablet) {
-            return _buildTabletLayout(context);
-          }
-          return _buildPhoneLayout(context);
+          return tablet
+              ? _buildTabletLayout(context)
+              : _buildPhoneLayout(context);
         },
       ),
     );
   }
 
-  Widget _buildPhoneLayout(BuildContext context) {
-    return Scaffold(
-      appBar: _buildAppBar(context),
-      body: _buildListContent(context),
-    );
-  }
+  Widget _buildPhoneLayout(BuildContext context) => Scaffold(
+        appBar: _buildAppBar(context),
+        body: _buildListContent(context),
+      );
 
-  Widget _buildTabletLayout(BuildContext context) {
-    return Scaffold(
-      appBar: _buildAppBar(context),
-      body: MasterDetailLayout(
-        master: _buildListContent(context),
-        detail: _selectedProductId != null
-            ? BlocProvider<ProductDetailBloc>(
-                create: (_) => getIt<ProductDetailBloc>()
-                  ..add(ProductDetailLoadRequested(_selectedProductId!)),
-                child: ProductDetailBody(productId: _selectedProductId!),
-              )
-            : null,
-        emptyDetail: const DetailEmptyPrompt(),
-      ),
-    );
-  }
+  Widget _buildTabletLayout(BuildContext context) => Scaffold(
+        appBar: _buildAppBar(context),
+        body: MasterDetailLayout(
+          master: _buildListContent(context),
+          detail: _selectedProductId != null
+              ? BlocProvider<ProductDetailBloc>(
+                  create: (_) => getIt<ProductDetailBloc>()
+                    ..add(ProductDetailLoadRequested(_selectedProductId!)),
+                  child: ProductDetailBody(productId: _selectedProductId!),
+                )
+              : null,
+          emptyDetail: const DetailEmptyPrompt(),
+        ),
+      );
 
   PreferredSizeWidget _buildAppBar(BuildContext context) {
     return AppBar(
@@ -130,9 +123,23 @@ class _ProductListPageState extends State<ProductListPage> {
           builder: (context, themeMode) {
             final isDark = themeMode == ThemeMode.dark ||
                 (themeMode == ThemeMode.system &&
-                    MediaQuery.of(context).platformBrightness == Brightness.dark);
+                    MediaQuery.of(context).platformBrightness ==
+                        Brightness.dark);
             return IconButton(
-              icon: Icon(isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined),
+              // Enhancement C: smooth icon rotation on theme toggle
+              icon: AnimatedSwitcher(
+                duration: AppDuration.normal,
+                transitionBuilder: (child, anim) => RotationTransition(
+                  turns: Tween(begin: 0.75, end: 1.0).animate(anim),
+                  child: FadeTransition(opacity: anim, child: child),
+                ),
+                child: Icon(
+                  isDark
+                      ? Icons.light_mode_outlined
+                      : Icons.dark_mode_outlined,
+                  key: ValueKey(isDark),
+                ),
+              ),
               tooltip: isDark ? 'Light Mode' : 'Dark Mode',
               onPressed: () => getIt<ThemeCubit>().toggle(),
             );
@@ -146,6 +153,20 @@ class _ProductListPageState extends State<ProductListPage> {
   Widget _buildListContent(BuildContext context) {
     return Column(
       children: [
+        // Enhancement B: cache status indicator
+        BlocBuilder<ProductListBloc, ProductListState>(
+          builder: (context, state) {
+            if (state.isFromCache) {
+              return CacheBanner(
+                isStale: state.isCacheStale,
+                onRefresh: () =>
+                    _listBloc.add(const ProductListRefreshRequested()),
+              );
+            }
+            return const SizedBox.shrink();
+          },
+        ),
+
         // Search bar
         Padding(
           padding: const EdgeInsets.fromLTRB(
@@ -154,14 +175,16 @@ class _ProductListPageState extends State<ProductListPage> {
           child: AppSearchBar(
             controller: _searchController,
             onChanged: (q) => _listBloc.add(ProductListSearchChanged(q)),
-            onClear: () => _listBloc.add(const ProductListSearchChanged('')),
+            onClear: () =>
+                _listBloc.add(const ProductListSearchChanged('')),
           ),
         ),
 
-        // Category chips row
+        // Category chips
         BlocBuilder<CategoryCubit, CategoryState>(
           builder: (context, state) {
-            if (state.status == CategoryStatus.loaded && state.categories.isNotEmpty) {
+            if (state.status == CategoryStatus.loaded &&
+                state.categories.isNotEmpty) {
               return BlocBuilder<ProductListBloc, ProductListState>(
                 builder: (context, listState) => CategoryChipRow(
                   categories: state.categories,
@@ -177,12 +200,9 @@ class _ProductListPageState extends State<ProductListPage> {
 
         const SizedBox(height: AppSpacing.sm),
 
-        // Product list
         Expanded(
           child: BlocBuilder<ProductListBloc, ProductListState>(
-            builder: (context, state) {
-              return _buildBody(context, state);
-            },
+            builder: (context, state) => _buildBody(context, state),
           ),
         ),
       ],
@@ -198,7 +218,8 @@ class _ProductListPageState extends State<ProductListPage> {
       case ProductListStatus.error:
         return AppErrorState(
           message: state.errorMessage ?? 'Failed to load products.',
-          onAction: () => _listBloc.add(const ProductListRefreshRequested()),
+          onAction: () =>
+              _listBloc.add(const ProductListRefreshRequested()),
         );
 
       case ProductListStatus.empty:
@@ -218,6 +239,9 @@ class _ProductListPageState extends State<ProductListPage> {
 
       case ProductListStatus.loaded:
         return RefreshIndicator(
+          color: Theme.of(context).colorScheme.primary,
+          backgroundColor: Theme.of(context).colorScheme.surface,
+          strokeWidth: 2.5,
           onRefresh: () async {
             _listBloc.add(const ProductListRefreshRequested());
             await _listBloc.stream.firstWhere(
@@ -228,21 +252,26 @@ class _ProductListPageState extends State<ProductListPage> {
             controller: _scrollController,
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.only(
-              top: AppSpacing.xs,
-              bottom: AppSpacing.xl,
-            ),
-            itemCount: state.products.length + (state.isLoadingMore ? 1 : 0),
+                top: AppSpacing.xs, bottom: AppSpacing.xl),
+            itemCount:
+                state.products.length + (state.isLoadingMore ? 1 : 0),
             itemBuilder: (context, index) {
               if (index >= state.products.length) {
-                return const Padding(
-                  padding: EdgeInsets.all(AppSpacing.xl),
-                  child: Center(child: CircularProgressIndicator()),
+                return Padding(
+                  padding: const EdgeInsets.all(AppSpacing.xl),
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      color: Theme.of(context).colorScheme.primary,
+                      strokeWidth: 2,
+                    ),
+                  ),
                 );
               }
               final product = state.products[index];
               return ProductCard(
                 key: ValueKey(product.id),
                 product: product,
+                index: index, // Enhancement C: stagger index
                 isSelected: product.id == _selectedProductId,
                 onTap: () => _onProductTap(product, context),
               );

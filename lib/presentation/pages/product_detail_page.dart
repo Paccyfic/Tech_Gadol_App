@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 
@@ -25,7 +26,6 @@ class ProductDetailPage extends StatelessWidget {
   }
 }
 
-/// creating a Reusable body – used both in full-screen and master-detail panel
 class ProductDetailBody extends StatefulWidget {
   final int productId;
 
@@ -47,26 +47,28 @@ class _ProductDetailBodyState extends State<ProductDetailBody> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final isTabletOrWider = MediaQuery.of(context).size.width >= 768;
 
-    return BlocBuilder<ProductDetailBloc, ProductDetailState>(
-      builder: (context, state) {
-        return Scaffold(
-          // Only show app bar (with back arrow) on narrow screens
-          appBar: isTabletOrWider
-              ? null
-              : AppBar(
-                  leading: BackButton(
-                    onPressed: () => Navigator.of(context).maybePop(),
-                  ),
-                  title: const Text('Product Details'),
-                ),
-          body: _buildBody(context, state),
-        );
-      },
-    );
-  }
+Widget build(BuildContext context) {
+  return BlocBuilder<ProductDetailBloc, ProductDetailState>(
+    builder: (context, state) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text(
+             'Product Details',
+            overflow: TextOverflow.ellipsis,
+          ),
+          leading: Navigator.canPop(context)
+              ? IconButton(
+                  icon: const Icon(Icons.arrow_back_ios_new_rounded),
+                  onPressed: () => Navigator.of(context).pop(),
+                )
+              : null,
+        ),
+        body: _buildBody(context, state),
+      );
+    },
+  );
+}
 
   Widget _buildBody(BuildContext context, ProductDetailState state) {
     switch (state.status) {
@@ -91,9 +93,21 @@ class _ProductDetailBodyState extends State<ProductDetailBody> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
+    // Enhancement C: helper for per-section staggered entrance
+    Widget animSection(Widget child, int step) => child
+        .animate()
+        .fadeIn(
+            delay: Duration(milliseconds: 60 * step), duration: 350.ms)
+        .slideY(
+            begin: 0.08,
+            end: 0,
+            delay: Duration(milliseconds: 60 * step),
+            duration: 350.ms,
+            curve: Curves.easeOutCubic);
+
     return CustomScrollView(
       slivers: [
-        // Image gallery
+        // Image gallery — Hero transition on first image
         SliverToBoxAdapter(
           child: ProductImageGallery(
             images: product.images,
@@ -102,112 +116,133 @@ class _ProductDetailBodyState extends State<ProductDetailBody> {
           ),
         ),
 
-        // Product info
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.all(AppSpacing.lg),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Category tag
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.md,
-                    vertical: AppSpacing.xs,
-                  ),
-                  decoration: BoxDecoration(
-                    color: colorScheme.primary.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(AppRadius.full),
-                  ),
-                  child: Text(
-                    product.category.replaceAll('-', ' ').toUpperCase(),
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: colorScheme.primary,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1.2,
+                // [0] Category tag
+                animSection(
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.md,
+                      vertical: AppSpacing.xs,
                     ),
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.md),
-
-                // Title
-                Text(
-                  product.title,
-                  style: theme.textTheme.headlineSmall,
-                ),
-                const SizedBox(height: AppSpacing.xs),
-
-                // Brand
-                Text(
-                  'by ${product.brand}',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: colorScheme.onSurface.withOpacity(0.6),
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.lg),
-
-                // Price
-                AppPriceBadge(
-                  price: product.price,
-                  discountPercentage: product.discountPercentage,
-                  fontSize: 22,
-                ),
-                const SizedBox(height: AppSpacing.lg),
-
-                // Rating section
-                Row(
-                  children: [
-                    RatingBarIndicator(
-                      rating: product.rating,
-                      itemBuilder: (context, _) => Icon(
-                        Icons.star_rounded,
-                        color: AppTheme.warningColor,
-                      ),
-                      itemCount: 5,
-                      itemSize: 20,
+                    decoration: BoxDecoration(
+                      color: colorScheme.primary.withOpacity(0.1),
+                      borderRadius:
+                          BorderRadius.circular(AppRadius.full),
                     ),
-                    const SizedBox(width: AppSpacing.sm),
-                    Text(
-                      product.rating.toStringAsFixed(1),
-                      style: theme.textTheme.titleSmall?.copyWith(
+                    child: Text(
+                      product.category
+                          .replaceAll('-', ' ')
+                          .toUpperCase(),
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: colorScheme.primary,
                         fontWeight: FontWeight.w700,
+                        letterSpacing: 1.2,
                       ),
                     ),
-                    const SizedBox(width: AppSpacing.sm),
-                    Text(
-                      '/ 5.0',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurface.withOpacity(0.5),
-                      ),
-                    ),
-                  ],
+                  ),
+                  0,
                 ),
                 const SizedBox(height: AppSpacing.md),
 
-                // Stock
-                AppStockBadge(stock: product.stock),
+                // [1] Title + Brand
+                animSection(
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(product.title,
+                          style: theme.textTheme.headlineSmall),
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        'by ${product.brand}',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onSurface.withOpacity(0.6),
+                        ),
+                      ),
+                    ],
+                  ),
+                  1,
+                ),
+                const SizedBox(height: AppSpacing.lg),
+
+                // [2] Price
+                animSection(
+                  AppPriceBadge(
+                    price: product.price,
+                    discountPercentage: product.discountPercentage,
+                    fontSize: 22,
+                  ),
+                  2,
+                ),
+                const SizedBox(height: AppSpacing.lg),
+
+                // [3] Rating + Stock
+                animSection(
+                  Row(
+                    children: [
+                      RatingBarIndicator(
+                        rating: product.rating,
+                        itemBuilder: (context, _) => Icon(
+                          Icons.star_rounded,
+                          color: AppTheme.warningColor,
+                        ),
+                        itemCount: 5,
+                        itemSize: 20,
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      Text(
+                        product.rating.toStringAsFixed(1),
+                        style: theme.textTheme.titleSmall
+                            ?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      Text(
+                        '/ 5.0',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color:
+                              colorScheme.onSurface.withOpacity(0.5),
+                        ),
+                      ),
+                      const Spacer(),
+                      AppStockBadge(stock: product.stock),
+                    ],
+                  ),
+                  3,
+                ),
                 const SizedBox(height: AppSpacing.lg),
 
                 const Divider(),
                 const SizedBox(height: AppSpacing.lg),
 
-                // Description
-                Text(
-                  'Description',
-                  style: theme.textTheme.titleMedium,
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                Text(
-                  product.description,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: colorScheme.onSurface.withOpacity(0.75),
-                    height: 1.6,
+                // [4] Description
+                animSection(
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Description',
+                          style: theme.textTheme.titleMedium),
+                      const SizedBox(height: AppSpacing.sm),
+                      Text(
+                        product.description,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color:
+                              colorScheme.onSurface.withOpacity(0.75),
+                          height: 1.6,
+                        ),
+                      ),
+                    ],
                   ),
+                  4,
                 ),
                 const SizedBox(height: AppSpacing.xxl),
 
-                // Details grid
-                _buildDetailsSection(context, product),
+                // [5] Details table
+                animSection(
+                    _buildDetailsSection(context, product), 5),
                 const SizedBox(height: AppSpacing.xxxl),
               ],
             ),
@@ -217,13 +252,15 @@ class _ProductDetailBodyState extends State<ProductDetailBody> {
     );
   }
 
-  Widget _buildDetailsSection(BuildContext context, ProductModel product) {
+  Widget _buildDetailsSection(
+      BuildContext context, ProductModel product) {
     final theme = Theme.of(context);
     final items = [
       ('Brand', product.brand),
       ('Category', product.category.replaceAll('-', ' ')),
       ('Stock', '${product.stock} units'),
-      ('Discount', '${product.discountPercentage.toStringAsFixed(1)}%'),
+      ('Discount',
+          '${product.discountPercentage.toStringAsFixed(1)}%'),
     ];
 
     return Column(
@@ -247,24 +284,26 @@ class _ProductDetailBodyState extends State<ProductDetailBody> {
                       vertical: AppSpacing.md,
                     ),
                     child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      mainAxisAlignment:
+                          MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
                           item.$1,
                           style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurface.withOpacity(0.6),
+                            color: theme.colorScheme.onSurface
+                                .withOpacity(0.6),
                           ),
                         ),
                         Text(
                           item.$2,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.w500,
-                          ),
+                          style: theme.textTheme.bodyMedium
+                              ?.copyWith(fontWeight: FontWeight.w500),
                         ),
                       ],
                     ),
                   ),
-                  if (index < items.length - 1) const Divider(height: 1),
+                  if (index < items.length - 1)
+                    const Divider(height: 1),
                 ],
               );
             }),

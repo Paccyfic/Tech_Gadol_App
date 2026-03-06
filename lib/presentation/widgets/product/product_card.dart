@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/product_model.dart';
@@ -8,13 +9,15 @@ import '../design_system/app_network_image.dart';
 class ProductCard extends StatelessWidget {
   final ProductModel product;
   final VoidCallback onTap;
-  final bool isSelected; // for master-detail
+  final bool isSelected;
+  final int index;
 
   const ProductCard({
     super.key,
     required this.product,
     required this.onTap,
     this.isSelected = false,
+    this.index = 0,
   });
 
   @override
@@ -57,7 +60,6 @@ class ProductCard extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Thumbnail
                 ClipRRect(
                   borderRadius: BorderRadius.circular(AppRadius.sm),
                   child: AppNetworkImage(
@@ -65,17 +67,13 @@ class ProductCard extends StatelessWidget {
                     width: 88,
                     height: 88,
                     fit: BoxFit.cover,
-                    heroTag: null,
                   ),
                 ),
                 const SizedBox(width: AppSpacing.md),
-
-                // Info
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Brand
                       Text(
                         product.brand,
                         style: theme.textTheme.labelSmall?.copyWith(
@@ -86,8 +84,6 @@ class ProductCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 2),
-
-                      // Title
                       Text(
                         product.title,
                         style: theme.textTheme.titleSmall,
@@ -95,16 +91,12 @@ class ProductCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: AppSpacing.sm),
-
-                      // Price
                       AppPriceBadge(
                         price: product.price,
                         discountPercentage: product.discountPercentage,
                         fontSize: 14,
                       ),
                       const SizedBox(height: AppSpacing.sm),
-
-                      // Rating + Stock row
                       Row(
                         children: [
                           AppRatingBadge(rating: product.rating, size: 11),
@@ -120,6 +112,19 @@ class ProductCard extends StatelessWidget {
           ),
         ),
       ),
-    );
+    )
+        .animate()
+        .fadeIn(
+          delay: Duration(milliseconds: 40 * (index % 20)),
+          duration: AppDuration.slow,
+          curve: Curves.easeOut,
+        )
+        .slideY(
+          begin: 0.12,
+          end: 0,
+          delay: Duration(milliseconds: 40 * (index % 20)),
+          duration: AppDuration.slow,
+          curve: Curves.easeOutCubic,
+        );
   }
 }

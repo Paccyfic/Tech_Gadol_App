@@ -8,6 +8,12 @@ abstract class ProductRepository {
   Future<Either<Failure, ProductListResponse>> getProducts({int limit, int skip});
   Future<Either<Failure, ProductListResponse>> searchProducts(String query, {int limit, int skip});
   Future<Either<Failure, List<String>>> getCategories();
-  Future<Either<Failure, ProductListResponse>> getProductsByCategory(String category, {int limit, int skip});
+
+  Future<Either<Failure, ProductListResponse>> getProductsByCategory(
+    String category, {
+    int limit = 20,
+    int skip = 0,
+  });
+
   Future<Either<Failure, ProductModel>> getProductById(int id);
 }
