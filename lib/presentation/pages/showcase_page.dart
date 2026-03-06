@@ -12,6 +12,7 @@ import '../widgets/design_system/app_states.dart';
 import '../widgets/design_system/category_chip.dart';
 import '../widgets/design_system/skeleton_loader.dart';
 import '../widgets/product/product_card.dart';
+import '../widgets/design_system/cache_banner.dart';
 
 class ShowcasePage extends StatefulWidget {
   const ShowcasePage({super.key});
@@ -170,6 +171,18 @@ class _ShowcasePageState extends State<ShowcasePage> {
                 AppStockBadge(stock: 0),
               ],
             ),
+          ),
+          _section(
+             context,
+              'CacheBanner',
+                'Offline / cache indicators (fresh and stale)',
+                Column(
+                  children: [
+                    CacheBanner(isStale: false),
+                    const SizedBox(height: 8),
+                    CacheBanner(isStale: true, onRefresh: () {}),
+                  ],
+                ),
           ),
           _section(
             context,

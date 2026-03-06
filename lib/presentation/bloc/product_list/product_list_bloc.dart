@@ -5,10 +5,12 @@ import 'package:equatable/equatable.dart';
 
 import '../../../core/constants/api_constants.dart';
 import '../../../core/errors/failures.dart';
+import '../../../data/datasources/local/product_local_datasource.dart';
 import '../../../data/models/product_model.dart';
+import '../../../domain/repositories/product_repository_impl.dart';
 import '../../../data/repositories/product_repository.dart';
 
-// ── Events ───────────────────────────────────────────────────────────────────
+// ── Events ────────────────────────────────────────────────────────────────────
 
 abstract class ProductListEvent extends Equatable {
   const ProductListEvent();
@@ -32,7 +34,7 @@ class ProductListSearchChanged extends ProductListEvent {
 }
 
 class ProductListCategorySelected extends ProductListEvent {
-  final String? category; // null = all
+  final String? category;
   const ProductListCategorySelected(this.category);
   @override
   List<Object?> get props => [category];
@@ -40,6 +42,10 @@ class ProductListCategorySelected extends ProductListEvent {
 
 class ProductListRefreshRequested extends ProductListEvent {
   const ProductListRefreshRequested();
+}
+
+class _ProductListSilentRefreshRequested extends ProductListEvent {
+  const _ProductListSilentRefreshRequested();
 }
 
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -55,6 +61,8 @@ class ProductListState extends Equatable {
   final bool isLoadingMore;
   final String? errorMessage;
   final int currentSkip;
+  final bool isFromCache;
+  final bool isCacheStale;
 
   const ProductListState({
     this.status = ProductListStatus.initial,
@@ -65,6 +73,8 @@ class ProductListState extends Equatable {
     this.isLoadingMore = false,
     this.errorMessage,
     this.currentSkip = 0,
+    this.isFromCache = false,
+    this.isCacheStale = false,
   });
 
   ProductListState copyWith({
@@ -76,17 +86,22 @@ class ProductListState extends Equatable {
     bool? isLoadingMore,
     String? errorMessage,
     int? currentSkip,
+    bool? isFromCache,
+    bool? isCacheStale,
   }) {
     return ProductListState(
       status: status ?? this.status,
       products: products ?? this.products,
-      selectedCategory:
-          selectedCategory != null ? selectedCategory() : this.selectedCategory,
+      selectedCategory: selectedCategory != null
+          ? selectedCategory()
+          : this.selectedCategory,
       searchQuery: searchQuery ?? this.searchQuery,
       hasMore: hasMore ?? this.hasMore,
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
       errorMessage: errorMessage ?? this.errorMessage,
       currentSkip: currentSkip ?? this.currentSkip,
+      isFromCache: isFromCache ?? this.isFromCache,
+      isCacheStale: isCacheStale ?? this.isCacheStale,
     );
   }
 
@@ -100,6 +115,8 @@ class ProductListState extends Equatable {
         isLoadingMore,
         errorMessage,
         currentSkip,
+        isFromCache,
+        isCacheStale,
       ];
 }
 
@@ -109,6 +126,11 @@ class ProductListBloc extends Bloc<ProductListEvent, ProductListState> {
   final ProductRepository _repository;
   Timer? _debounceTimer;
 
+  ProductRepositoryImpl? get _repoImpl =>
+      _repository is ProductRepositoryImpl
+          ? _repository as ProductRepositoryImpl
+          : null;
+
   ProductListBloc({required ProductRepository repository})
       : _repository = repository,
         super(const ProductListState()) {
@@ -117,6 +139,7 @@ class ProductListBloc extends Bloc<ProductListEvent, ProductListState> {
     on<ProductListSearchChanged>(_onSearchChanged);
     on<ProductListCategorySelected>(_onCategorySelected);
     on<ProductListRefreshRequested>(_onRefresh);
+    on<_ProductListSilentRefreshRequested>(_onSilentRefresh);
   }
 
   Future<void> _onLoadRequested(
@@ -134,7 +157,8 @@ class ProductListBloc extends Bloc<ProductListEvent, ProductListState> {
   ) async {
     if (!state.hasMore || state.isLoadingMore) return;
     emit(state.copyWith(isLoadingMore: true));
-    await _fetchProducts(emit, skip: state.currentSkip + ApiConstants.defaultLimit);
+    await _fetchProducts(
+        emit, skip: state.currentSkip + ApiConstants.defaultLimit);
   }
 
   Future<void> _onSearchChanged(
@@ -173,19 +197,55 @@ class ProductListBloc extends Bloc<ProductListEvent, ProductListState> {
     ProductListRefreshRequested event,
     Emitter<ProductListState> emit,
   ) async {
-    emit(state.copyWith(status: ProductListStatus.loading, currentSkip: 0));
-    await _fetchProducts(emit, skip: 0, reset: true);
+    emit(state.copyWith(
+      status: ProductListStatus.loading,
+      currentSkip: 0,
+      isFromCache: false,
+      isCacheStale: false,
+    ));
+    await _fetchProducts(emit, skip: 0, reset: true, forceNetwork: true);
+  }
+
+  Future<void> _onSilentRefresh(
+    _ProductListSilentRefreshRequested event,
+    Emitter<ProductListState> emit,
+  ) async {
+    final repoImpl = _repoImpl;
+    if (repoImpl == null) return;
+    final result = await repoImpl.refreshProducts(
+      limit: ApiConstants.defaultLimit,
+      skip: 0,
+    );
+    result.fold(
+      (_) => null, // silent fail — stale data remains shown
+      (response) {
+        if (!isClosed) {
+          emit(state.copyWith(
+            products: response.products,
+            hasMore: response.hasMore,
+            currentSkip: 0,
+            isFromCache: false,
+            isCacheStale: false,
+          ));
+        }
+      },
+    );
   }
 
   Future<void> _fetchProducts(
     Emitter<ProductListState> emit, {
     required int skip,
     bool reset = false,
+    bool forceNetwork = false,
   }) async {
     final query = state.searchQuery.trim();
     final category = state.selectedCategory;
 
-    final result = await _resolveRequest(query: query, category: category, skip: skip);
+    final result = await _resolveRequest(
+      query: query,
+      category: category,
+      skip: skip,
+    );
 
     result.fold(
       (failure) {
@@ -200,6 +260,9 @@ class ProductListBloc extends Bloc<ProductListEvent, ProductListState> {
             ? response.products
             : [...state.products, ...response.products];
 
+        final isStale = response.isFromCache &&
+            response.cacheStatus == CacheStatus.stale;
+
         emit(state.copyWith(
           status: newProducts.isEmpty
               ? ProductListStatus.empty
@@ -209,7 +272,14 @@ class ProductListBloc extends Bloc<ProductListEvent, ProductListState> {
           isLoadingMore: false,
           currentSkip: skip,
           errorMessage: null,
+          isFromCache: response.isFromCache,
+          isCacheStale: isStale,
         ));
+
+        // Trigger silent background refresh when stale
+        if (isStale && !isClosed) {
+          add(const _ProductListSilentRefreshRequested());
+        }
       },
     );
   }
@@ -220,8 +290,6 @@ class ProductListBloc extends Bloc<ProductListEvent, ProductListState> {
     required int skip,
   }) {
     if (query.isNotEmpty) {
-      // Search takes priority — we search within category by fetching search results
-      // and filtering client-side if a category is also selected
       return _repository.searchProducts(
         query,
         limit: ApiConstants.defaultLimit,

@@ -117,12 +117,17 @@ class ProductListResponse {
   final int total;
   final int skip;
   final int limit;
+  // Cache metadata – only set when data comes from local store
+  final bool isFromCache;
+  final dynamic cacheStatus;
 
   const ProductListResponse({
     required this.products,
     required this.total,
     required this.skip,
     required this.limit,
+    this.isFromCache = false,
+    this.cacheStatus,
   });
 
   factory ProductListResponse.fromJson(Map<String, dynamic> json) {

@@ -59,13 +59,35 @@ class _ProductImageGalleryState extends State<ProductImageGallery> {
                 width: double.infinity,
                 height: widget.height,
                 fit: BoxFit.cover,
-                heroTag: index == 0 ? 'product-image-${widget.productId}' : null,
+                // Hero only on first image — matches list tap source
+                heroTag: index == 0
+                    ? 'product-image-${widget.productId}'
+                    : null,
               );
             },
           ),
         ),
 
-        // Page indicator
+        // Gradient overlay for indicator legibility
+        Positioned(
+          bottom: 0,
+          left: 0,
+          right: 0,
+          child: Container(
+            height: 60,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.transparent,
+                  Colors.black.withOpacity(0.3),
+                ],
+              ),
+            ),
+          ),
+        ),
+
         if (widget.images.length > 1)
           Positioned(
             bottom: AppSpacing.md,
@@ -76,8 +98,8 @@ class _ProductImageGalleryState extends State<ProductImageGallery> {
                 controller: _pageController,
                 count: widget.images.length,
                 effect: ExpandingDotsEffect(
-                  activeDotColor: Theme.of(context).colorScheme.primary,
-                  dotColor: Colors.white.withOpacity(0.6),
+                  activeDotColor: Colors.white,
+                  dotColor: Colors.white.withOpacity(0.5),
                   dotHeight: 6,
                   dotWidth: 6,
                   expansionFactor: 3,

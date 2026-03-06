@@ -21,7 +21,7 @@ dependencies:
 
   # Networking
   dio: ^5.3.2
-  retrofit: ^4.0.3
+  
 
   # Image handling
   cached_network_image: ^3.3.0
@@ -31,12 +31,20 @@ dependencies:
   smooth_page_indicator: ^1.1.0
   flutter_rating_bar: ^4.0.1
 
+  # Enhancement C: Animations
+  flutter_animate: ^4.3.0
+
   # Utils
   dartz: ^0.10.1
   get_it: ^7.6.4
   injectable: ^2.3.2
   logger: ^2.0.2+1
   connectivity_plus: ^5.0.1
+
+  # Enhancement B: Offline / local cache
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  path_provider: ^2.1.1
 
 dev_dependencies:
   flutter_test:
@@ -45,8 +53,8 @@ dev_dependencies:
   # Code generation
   build_runner: ^2.4.6
   injectable_generator: ^2.4.1
-  retrofit_generator: ^8.0.4
   json_serializable: ^6.7.1
+  hive_generator: ^2.0.1
 
   # Testing
   bloc_test: ^9.1.5
