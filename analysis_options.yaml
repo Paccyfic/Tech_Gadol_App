@@ -1,0 +1,14 @@
+include: package:flutter_lints/flutter.yaml
+
+linter:
+  rules:
+    - avoid_print
+    - prefer_const_constructors
+    - prefer_const_declarations
+    - prefer_final_fields
+    - unnecessary_this
+    - sort_constructors_first
+    - always_declare_return_types
+    - cancel_subscriptions
+    - close_sinks
+    - avoid_redundant_argument_values
